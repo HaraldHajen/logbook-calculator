@@ -1,0 +1,360 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html><head>
+<title>The Pocket Calculator for the log book</title>
+<!--
+	 Author : Harald Hajen
+	  Begin : 2012-03-30
+	changed : 2026-10-18 / (former PHP verion: 2013-11-28)
+-->
+<meta http-equiv="Content-Language" content="de">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta name="viewport" content="user-scalable=no, width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style type="text/css" media="all">
+	body { background-color:#E0E0E0; margin:5px; margin-bottom:0px; }
+	table { border-collapse:collapse; border:0; padding:10px; margin:0px; 
+		width:100%; height:100%; }
+	td { background-color:#E0E0E0; border:0; padding:0; text-align:center; vertical-align:middle; }
+	input { font-family:Courier New,"Courier 10 Pitch",Courier,Ubuntu Mono,DejaVu Sans Mono,
+		Liberation Mono,monospace; padding:0px; font-size:18pt; font-weight:bold; 
+		vertical-align:middle; }
+	.button { width:95%; height:95%; text-align:center; }
+	.display { width:98%; height:90%; text-align:right; background-color:#FEFEFE
+		/* Safari zeigt "white" sonst hellgrau an*/; }
+</style>
+<link rel="icon" href="LogbookCalculator.ico" type="image/x-icon">
+<link rel="shortcut icon" href="LogbookCalculator.ico" type="image/x-icon">
+<script type="text/javascript">
+///////////////////////////////////
+//
+//  browser detection
+//
+var strUserAgent = navigator.userAgent.toLowerCase();
+var bNonWindows = strUserAgent.indexOf('linux') >= 0
+	|| strUserAgent.indexOf('macintosh') >= 0 || strUserAgent.indexOf('mac os x') >= 0;
+var bMobile = strUserAgent.indexOf('mobile') >= 0 || strUserAgent.indexOf('silk') >= 0;
+var bIPhone = strUserAgent.indexOf('iphone') >= 0;
+var bWithFont6 = !bMobile && !bNonWindows;
+var bFirefox = strUserAgent.indexOf('firefox') >= 0;
+
+var aAllowed = new Array(48, 49, 50, 51, 52, 53, 54, 55, 56, 57, // 9 , numeric
+	96, 97, 98, 99, 100, 101, 102, 103, 104, 105, // 9 , (another 10 keys in numeric block)
+	8, 67, 27, // 12 , Backspace, C, Escape
+	13, // 13 , Enter
+	107, 109, 106, 111,  // 17 , + - * and /
+	171, 173, // 19 , +* and -_: Ff XP W7 U
+	187, 189, // 21 , +* and -_: IE W98 XP W7, Chr XP W7 U, Opr W7, Saf W7,
+	61/*, 109*/); // 23 , +* and -_: Netscape W98,
+//  107, 109); // 25 , +* and -_: Opr U,
+
+var bError = false, bIsInput = -1, bFlipflop = 0;
+var nWidth = 0, nHeight = 0; //  latch for dimensions of the "8" button
+var nFactor = 0.8; /* percentage of font height in button height */
+var bTestingFontSize = false; // flag vor pending shrinking of buttons (nur bWithFont6)
+var nThreshold = 1 - (1 - nFactor) / 2; // limit for temporary font size reduction to 6px
+var nPreviousOperation = 0, nPreviousOperator = 0;
+var nMaxPreDecimals = 10;
+var strSign = '', strInput = '';
+var aPreviousAction = new Array(0, 0);
+var oKey8, oTags;
+
+function Term(openingBracketHere, Operation, previous, Operand) { // Object definition !
+	this.openingBracketHere = openingBracketHere;
+	this.Operation = Operation;
+	this.previous = previous;
+	this.Operand = Operand;
+}
+
+var theTerm = new Term(0, 0, null, 0);
+
+///////////////////////////////////
+//
+//  HTML page control
+//
+
+function SetFontSize(n) {
+	var strFontSize = String(Math.round(n)) + 'px';
+	for(var i = oTags.length - 1; i >= 0; i--) oTags[i].style.fontSize = strFontSize;
+		// DON'T replace with "for(x in y)" syntax!! Doesn't work with predefined objects.
+}
+
+function AlignSize(Event) { // reacts on onresize and onorientationchange events
+	if(bWithFont6 && bTestingFontSize) return; // suppress intermittent events
+	var bNewWidth = oKey8.clientWidth;
+	var bNewHeight = oKey8.clientHeight;
+	if(bWithFont6 && ((bNewWidth < nWidth * nThreshold) || (bNewHeight < nHeight * nThreshold))) {
+		bTestingFontSize = true;
+		SetFontSize(6); 
+		bNewWidth = oKey8.clientWidth;
+		bNewHeight = oKey8.clientHeight;
+	}
+	if(((bNewWidth != nWidth) || (bNewHeight != nHeight)) && (document.LogbookCalculator)) {
+		nWidth = bNewWidth;
+		nHeight = bNewHeight;
+		// mobile: prevent portrait being inflated to moren than screen size
+		SetFontSize(nHeight * nFactor * (bMobile ? (window.orientation ? 1 : 0.55) : 1));
+	}
+	if(bWithFont6) bTestingFontSize = false;
+}
+
+function Init() { // initializes font size according to available button size
+	if(!('indexOf' in Array.prototype)) { // Add ECMA262-5 Array methods if not supported natively
+		Array.prototype.indexOf = function(find, i /*opt*/) {
+			if(i === undefined) i = 0;
+			if(i < 0) i += this.length;
+			if(i < 0) i = 0;
+			for(var n = this.length; i < n; i++)
+				if(i in this && this[i] === find)
+					return i;
+			return -1;
+		};
+	}
+	if(bFirefox) document.body.style.marginBottom = '16px';
+	oTags = document.getElementsByTagName('input');
+	oKey8 = document.getElementById('Key8');
+	document.body.onclick = bClickedOrTapped;
+	window.onresize = AlignSize;
+	document.onkeyup = bTyped; // Event-Handler registrieren
+	AlignSize();
+}
+
+///////////////////////////////////
+//
+//  Calculator
+//
+
+function RefreshDisplay() {
+/* writes to "Display", depending on bIsInput either ...
+- the digits in strInput or
+- the value of theTerm.Operand */
+	var strTemp;
+	var nLen;
+	if(bIsInput) {
+		strTemp = String(strInput);
+		nLen = strInput.length;
+		if(nLen < 3) strTemp = String('000').substr(0, 3 - nLen) + strInput;
+		var i = strTemp.length - 2;
+		strTemp = strSign + strTemp.substring(0, i) + ':' + strTemp.substr(i, 2);
+	}
+	else {
+		nOperand = Math.round(theTerm.Operand);
+		var nRemainder = nOperand % 60;
+		var strRemainder = String(Math.abs(nRemainder) + 100);
+		strTemp = (nOperand < 0 && nOperand > -60 ? '-' : '') // minus sign if hours == 0
+			+ String((nOperand - nRemainder) / 60) + ':' 
+			+ strRemainder.substr(strRemainder.length - 2, 2);
+	}
+	nLen = strTemp.length;
+	if(strTemp.substr(0, 1) == '-') nLen--;
+	if(nLen > 11) bError = true;
+	if(bError) strTemp = 'E  ' + strTemp;
+	document.LogbookCalculator.Display.value = strTemp + ' ';
+	self.focus();
+} // RefreshDisplay()
+
+function ClearOperand() { /* clears last input */
+	strInput = '0';
+	strSign = '';
+	bError = false;
+	while(theTerm.previous != null) theTerm = theTerm.previous;
+	theTerm.Operand = 0;
+	theTerm.Operation = 14; // "+" is default operation !
+	theTerm.openingBracketHere = 0; // first operator in case of first input...
+	bBracket = 0;                // ... is an operation (+-*/^)
+}
+
+function InputValue() { // handles a completed numeric input
+	if((strInput.length >= 2) && (strInput.charAt(strInput.length - 2) > '5'))
+		bError = true;
+	if(strInput.length <= 2) {
+		theTerm.Operand = parseInt(strSign + strInput);
+	}
+	else {
+		theTerm.Operand = parseInt(strSign + strInput.substring(0, strInput.length - 2)) * 60
+			+ parseInt(strSign + strInput.substring(strInput.length - 2));
+	}
+	if(isNaN(theTerm.Operand)) theTerm.Operand = 0;
+} // InputValue()
+
+function EvaluateTerm(Completion, nAction) { // handling one operation
+	while((theTerm.previous != null) && // operands exist ?
+		(theTerm.previous.Operation >= (nAction & -2)) && // point before line calculation etc.
+		((theTerm.openingBracketHere == 0) || (Completion < 2))) { // not separated by bBracket
+		try { // completion 0: "=" or return, 1: ")", 2: normal operator
+			switch(theTerm.previous.Operation) {
+				case 14: theTerm.previous.Operand += theTerm.Operand;
+						 break;
+				case 15: theTerm.previous.Operand -= theTerm.Operand;
+						 break;
+				case 16: theTerm.previous.Operand *= theTerm.Operand;
+						 break;
+				case 17: if(theTerm.Operand == 0) {
+							bError = true;
+						 }
+						 else theTerm.previous.Operand /= theTerm.Operand;
+			}
+		} catch(e) {
+			bError = true;
+		}
+		theTerm.previous.Operation = theTerm.Operation;
+		theTerm = theTerm.previous;
+		if((theTerm.openingBracketHere > 0) || (Completion == 1)) {
+			theTerm.openingBracketHere--;
+			break;
+		}
+	}
+} // EvaluateTerm()
+
+function Command(nAction) {
+	var bBracket = 0;
+	if(bError != 0) {
+		if((nAction == 10) || (nAction == 12)) {
+			ClearOperand();
+			bBracket = 0;
+			bError = false;
+		}
+		return;
+	}
+	if(nAction == 12) { // Esc is same as 3 times Backspace
+		Command(10);
+		Command(10);
+		nAction = 10;
+	}
+	else {
+		if(!bIsInput) {
+			strInput = '0';
+			strSign = '';
+		}
+		var bPreviousIsInput = bIsInput;
+		bIsInput = (nAction <= 10); // includes Backspc!
+		if(!bIsInput && bPreviousIsInput) InputValue(); // detect toggle
+		if(bIsInput) {
+		  if(!bPreviousIsInput && !theTerm.Operand == 0 || (theTerm.Operation != 0))
+			theTerm = new Term(0, 0, theTerm, 0);
+		}
+			//0..9
+		if(nAction <= 9) {
+			if(strInput.length < nMaxPreDecimals) { // no overflow yet
+				if(strInput == '0') strInput = nAction.toString()
+				else strInput += nAction;
+			}
+			else bError = true;
+		}
+			//<-
+		if(nAction == 10) {
+			if(aPreviousAction[bFlipflop] == 10) {
+				if(aPreviousAction[bFlipflop ^ 1] == 10) {
+					bBracket = 0;
+				}
+				ClearOperand();
+			}
+			else if(bIsInput) {
+				strInput = strInput.length == 1 ? '0' : strInput.substring(0, strInput.length - 1);
+			}
+		}
+			//\n=
+		if(nAction == 13) {
+			if(aPreviousAction[bFlipflop] == 13) {
+				theTerm.Operation = nPreviousOperation;
+				theTerm = new Term(0, 0, theTerm, nPreviousOperator);
+			}
+			else if(theTerm.previous != null) {
+				nPreviousOperator = theTerm.Operand;
+				nPreviousOperation = theTerm.previous.Operation;
+			}
+			while(bBracket >= 0) {
+				EvaluateTerm(0, nAction);
+				bBracket--;
+			}
+			bBracket = 0;
+		}
+			//+-*/^
+		if((nAction >= 14) && (nAction <= 17)) {
+			if((aPreviousAction[bFlipflop] >= 14) && (aPreviousAction[bFlipflop] <= 17)) {
+				theTerm.Operation = nAction;
+			}
+			else {
+				EvaluateTerm(2, nAction);
+				theTerm.Operation = nAction;
+			}
+		}
+		RefreshDisplay();
+		bFlipflop ^= 1;
+		aPreviousAction[bFlipflop] = nAction;
+		return(nAction >= 0);
+	}
+} // Command
+
+///////////////////////////////////
+//
+//  Event handlers
+//
+
+function bTyped(Event) { // event handler
+	var nKeycode = -1;
+	if(!Event) Event = window.event; // IE special treatment
+	if(Event.which) {
+		nKeycode = Event.which;
+	} else if(Event.keyCode) {
+		nKeycode = Event.keyCode;
+	}
+	var nPos = aAllowed.indexOf(nKeycode);
+	var bWithShift = Event.shiftKey;
+	switch(nKeycode) {
+		case  48: if(bWithShift) nPos = 13 + 10; // Shift 0 => '='
+				  break;
+		case  55: if(bWithShift) nPos = 17 + 10; // Shift 7 => '/'
+				  break;
+		case  67: nPos = 10 + 10;
+				  break;
+		case  61, 171, 187: if(bWithShift) nPos = 16 + 10 // * rechts neben 'ue'
+				  else nPos = 14 + 10; // + rechts neben 'ue'
+				  break;
+		case 173, 189: if(bWithShift) return // _ verwerfen
+				  else nPos = 15 + 10; // - rechts neben '.'
+	}
+	if(nPos >= 0) {
+		if(nPos >= 10) nPos -= 10;
+		Command(nPos);
+	}
+} // bTyped
+
+function bClickedOrTapped(Event) {
+	if(!Event) Event = window.event; // alter IE
+	var oDestination = Event.target || Event.srcElement;
+	var strId = oDestination.id;
+	if(strId.substr(0, 3) == 'Key') {
+		Command(parseInt(strId.substr(3, 2)));
+		if(!bIPhone && oDestination.blur) oDestination.blur();
+	}
+}
+</script>
+</head>
+<body onload="Init()" style="" >
+<form name="LogbookCalculator" action="" onsubmit="return false;">
+<table>
+<tbody>
+<tr>
+<td colspan="4">
+<input name="Display" class="display" value="0:00 " type="text" readonly></td></tr>
+<tr>
+<td><input class="button" id="Key7" value="7" type="button"></td>
+<td><input class="button" id="Key8" value="8" type="button"></td>
+<td><input class="button" id="Key9" value="9" type="button"></td>
+<td><input class="button" id="Key14" value="+" type="button"></td></tr>
+<tr>
+<td><input class="button" id="Key4" value="4" type="button"></td>
+<td><input class="button" id="Key5" value="5" type="button"></td>
+<td><input class="button" id="Key6" value="6" type="button"></td>
+<td><input class="button" id="Key15" value="-" type="button"></td></tr>
+<tr>
+<td><input class="button" id="Key1" value="1" type="button"></td>
+<td><input class="button" id="Key2" value="2" type="button"></td>
+<td><input class="button" id="Key3" value="3" type="button"></td>
+<td><input class="button" id="Key16" value="*" type="button"></td></tr>
+<tr>
+<td><input class="button" id="Key0" value="0" type="button"></td>
+<td><input class="button" id="Key13" value="=" type="button"></td>
+<td><input class="button" id="Key10" value="C" type="button"></td>
+<td><input class="button" id="Key17" value="/" type="button"></td></tr>
+</tbody></table></form></body></html>
