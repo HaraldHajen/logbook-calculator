@@ -1,10 +1,12 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html><head>
-<title>The Pocket Calculator for the log book</title>
+<title>Logbook Calculator</title>
 <!--
+	The Pocket Calculator for the log book
 	 Author : Harald Hajen
 	  Begin : 2012-03-30
 	changed : 2026-10-18 / (former PHP verion: 2013-11-28)
+	                                                                         ->                  ->
 -->
 <meta http-equiv="Content-Language" content="de">
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -14,7 +16,8 @@
 	body { background-color:#E0E0E0; margin:5px; margin-bottom:0px; }
 	table { border-collapse:collapse; border:0; padding:10px; margin:0px; 
 		width:100%; height:100%; }
-	td { background-color:#E0E0E0; border:0; padding:0; text-align:center; vertical-align:middle; }
+	td { background-color:#E0E0E0; border:0; padding:0; 
+		text-align:center; vertical-align:middle; }
 	input { font-family:Courier New,"Courier 10 Pitch",Courier,Ubuntu Mono,DejaVu Sans Mono,
 		Liberation Mono,monospace; padding:0px; font-size:18pt; font-weight:bold; 
 		vertical-align:middle; }
@@ -29,6 +32,7 @@
 //
 //  browser detection
 //
+
 var strUserAgent = navigator.userAgent.toLowerCase();
 var bNonWindows = strUserAgent.indexOf('linux') >= 0
 	|| strUserAgent.indexOf('macintosh') >= 0 || strUserAgent.indexOf('mac os x') >= 0;
@@ -37,19 +41,19 @@ var bIPhone = strUserAgent.indexOf('iphone') >= 0;
 var bWithFont6 = !bMobile && !bNonWindows;
 var bFirefox = strUserAgent.indexOf('firefox') >= 0;
 
-var aAllowed = new Array(48, 49, 50, 51, 52, 53, 54, 55, 56, 57, // 9 , numeric
-	96, 97, 98, 99, 100, 101, 102, 103, 104, 105, // 9 , (another 10 keys in numeric block)
-	8, 67, 27, // 12 , Backspace, C, Escape
-	13, // 13 , Enter
-	107, 109, 106, 111,  // 17 , + - * and /
-	171, 173, // 19 , +* and -_: Ff XP W7 U
-	187, 189, // 21 , +* and -_: IE W98 XP W7, Chr XP W7 U, Opr W7, Saf W7,
-	61/*, 109*/); // 23 , +* and -_: Netscape W98,
-//  107, 109); // 25 , +* and -_: Opr U,
+var aAllowed = new Array(48, 49, 50, 51, 52, 53, 54, 55, 56, 57, // 9, numeric
+	96, 97, 98, 99, 100, 101, 102, 103, 104, 105, // 9, (another 10 keys in numeric block)
+	8, 67, 27, // 12, Backspace, C, Escape
+	13, // 13, Enter
+	107, 109, 106, 111,  // 17, + - * and /
+	171, 173, // 19, +* and -_: Ff XP W7 U
+	187, 189, // 21, +* and -_: IE W98 XP W7, Chr XP W7 U, Opr W7, Saf W7,
+	61/*, 109*/); // 23, +* and -_: Netscape W98,
+//  107, 109); // 25, +* and -_: Opr U,
 
 var bError = false, bIsInput = -1, bFlipflop = 0;
-var nWidth = 0, nHeight = 0; //  latch for dimensions of the "8" button
-var nFactor = 0.8; /* percentage of font height in button height */
+var nWidth = 0, nHeight = 0; // latch for dimensions of the "8" button
+var nFactor = 0.8; // percentage of font height in button height
 var bTestingFontSize = false; // flag vor pending shrinking of buttons (nur bWithFont6)
 var nThreshold = 1 - (1 - nFactor) / 2; // limit for temporary font size reduction to 6px
 var nPreviousOperation = 0, nPreviousOperator = 0;
@@ -91,7 +95,7 @@ function AlignSize(Event) { // reacts on onresize and onorientationchange events
 	if(((bNewWidth != nWidth) || (bNewHeight != nHeight)) && (document.LogbookCalculator)) {
 		nWidth = bNewWidth;
 		nHeight = bNewHeight;
-		// mobile: prevent portrait being inflated to moren than screen size
+			// mobile: prevent portrait being inflated to size bigger than screen
 		SetFontSize(nHeight * nFactor * (bMobile ? (window.orientation ? 1 : 0.55) : 1));
 	}
 	if(bWithFont6) bTestingFontSize = false;
@@ -232,7 +236,7 @@ function Command(nAction) {
 		  if(!bPreviousIsInput && !theTerm.Operand == 0 || (theTerm.Operation != 0))
 			theTerm = new Term(0, 0, theTerm, 0);
 		}
-			//0..9
+			// 0..9
 		if(nAction <= 9) {
 			if(strInput.length < nMaxPreDecimals) { // no overflow yet
 				if(strInput == '0') strInput = nAction.toString()
@@ -240,7 +244,7 @@ function Command(nAction) {
 			}
 			else bError = true;
 		}
-			//<-
+			// <-
 		if(nAction == 10) {
 			if(aPreviousAction[bFlipflop] == 10) {
 				if(aPreviousAction[bFlipflop ^ 1] == 10) {
@@ -252,7 +256,7 @@ function Command(nAction) {
 				strInput = strInput.length == 1 ? '0' : strInput.substring(0, strInput.length - 1);
 			}
 		}
-			//\n=
+			// \n=
 		if(nAction == 13) {
 			if(aPreviousAction[bFlipflop] == 13) {
 				theTerm.Operation = nPreviousOperation;
@@ -268,7 +272,7 @@ function Command(nAction) {
 			}
 			bBracket = 0;
 		}
-			//+-*/^
+			// +-*/^
 		if((nAction >= 14) && (nAction <= 17)) {
 			if((aPreviousAction[bFlipflop] >= 14) && (aPreviousAction[bFlipflop] <= 17)) {
 				theTerm.Operation = nAction;
@@ -307,11 +311,14 @@ function bTyped(Event) { // event handler
 				  break;
 		case  67: nPos = 10 + 10;
 				  break;
-		case  61, 171, 187: if(bWithShift) nPos = 16 + 10 // * rechts neben 'ue'
-				  else nPos = 14 + 10; // + rechts neben 'ue'
+		case  61:
+		case 171: 
+		case 187: if(bWithShift) nPos = 16 + 10 // * on the main keyboard
+				  else nPos = 14 + 10; // + on the main keyboard
 				  break;
-		case 173, 189: if(bWithShift) return // _ verwerfen
-				  else nPos = 15 + 10; // - rechts neben '.'
+		case 173:
+		case 189: if(bWithShift) return // dispose _
+				  else nPos = 15 + 10; // - on the main keyboard
 	}
 	if(nPos >= 0) {
 		if(nPos >= 10) nPos -= 10;
@@ -330,7 +337,7 @@ function bClickedOrTapped(Event) {
 }
 </script>
 </head>
-<body onload="Init()" style="" >
+<body onload="Init()">
 <form name="LogbookCalculator" action="" onsubmit="return false;">
 <table>
 <tbody>
